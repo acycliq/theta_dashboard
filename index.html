@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cell Inefficiency</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>Cell Inefficiency</h1>
+            <p class="subtitle">Comparing pciSeq with and without cell inefficiency model</p>
+            <div class="run-info">
+                <span class="run-label base">Base:</span> <span>without_cell_inefficiency (standard pciSeq)</span>
+                <span class="run-label alt">Alternative:</span> <span>with_cell_inefficiency (theta-enabled)</span>
+            </div>
+        </header>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="comparison">Classification Comparison</button>
+            <button class="tab-btn" data-tab="theta">Theta Distribution</button>
+            <button class="tab-btn" data-tab="components">Theta Components</button>
+            <button class="tab-btn" data-tab="cell">Cell Components</button>
+            <button class="tab-btn" data-tab="heatmap">Gene Contributions</button>
+        </div>
+
+        <!-- Tab 1: Classification Comparison -->
+        <div id="comparisonTab" class="tab-content active">
+            <!-- Controls -->
+            <section class="controls">
+                <div class="control-group">
+                    <label for="regionSelect">Region:</label>
+                    <select id="regionSelect">
+                        <option value="ca1">CA1</option>
+                        <option value="ca2">CA2</option>
+                        <option value="ca3">CA3</option>
+                        <option value="dg">Dentate Gyrus (DG)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Filter:</label>
+                    <div class="button-group">
+                        <button class="filter-btn active" data-filter="all">All Cells</button>
+                        <button class="filter-btn" data-filter="high_gene">≥40 Counts</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Main Content -->
+            <div id="mainContent">
+            <!-- Row 1: Sankey Diagram (Full Width) -->
+            <section class="chart-section full-width">
+                <h2>Classification Transitions: How Theta Changed Cell Types</h2>
+                <p class="chart-subtitle">Left nodes: WITHOUT theta | Right nodes: WITH theta | Links show cell reclassifications</p>
+                <div id="sankeyChart" class="chart"></div>
+            </section>
+
+            <!-- Row 2: Side-by-Side Bar Charts -->
+            <div class="chart-row">
+                <section class="chart-section half-width">
+                    <h2 id="baseChartTitle">WITHOUT Theta (Baseline)</h2>
+                    <div id="baseCountsChart" class="chart"></div>
+                </section>
+
+                <section class="chart-section half-width">
+                    <h2 id="altChartTitle">WITH Theta (Cell Inefficiency)</h2>
+                    <div id="altCountsChart" class="chart"></div>
+                </section>
+            </div>
+        </div>
+        </div>
+
+        <!-- Tab 2: Theta Distribution -->
+        <div id="thetaTab" class="tab-content">
+            <!-- Controls -->
+            <section class="controls">
+                <div class="control-group">
+                    <label for="thetaRegionSelect">Region:</label>
+                    <select id="thetaRegionSelect">
+                        <option value="ca1">CA1</option>
+                        <option value="ca2">CA2</option>
+                        <option value="ca3">CA3</option>
+                        <option value="dg">Dentate Gyrus (DG)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>
+                        <input type="checkbox" id="useDensityPlot" checked>
+                        Kernel Density Curves
+                    </label>
+                </div>
+            </section>
+
+            <!-- Theta Histograms Grid (3x3) -->
+            <div id="thetaHistograms" class="histogram-grid"></div>
+        </div>
+
+        <!-- Tab 3: Theta Components Scatter -->
+        <div id="componentsTab" class="tab-content">
+            <!-- Controls -->
+            <section class="controls">
+                <div class="control-group">
+                    <label for="componentsRegionSelect">Region:</label>
+                    <select id="componentsRegionSelect">
+                        <option value="ca1">CA1</option>
+                        <option value="ca2">CA2</option>
+                        <option value="ca3">CA3</option>
+                        <option value="dg">Dentate Gyrus (DG)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Component:</label>
+                    <div class="button-group">
+                        <button class="comp-mode-btn active" data-mode="shape">Shape</button>
+                        <button class="comp-mode-btn" data-mode="rate">Rate</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3x3 Scatter Grid showing user-defined vs data-driven components -->
+            <div id="componentsGrid" class="histogram-grid"></div>
+        </div>
+
+        <!-- Tab 4: Single Cell Components -->
+        <div id="cellTab" class="tab-content">
+            <!-- Controls -->
+            <section class="controls">
+                <div class="control-group">
+                    <label for="cellNumInput">Cell_Num:</label>
+                    <input id="cellNumInput" type="number" placeholder="Enter Cell_Num" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;width:200px;" />
+                    <button id="loadCellButton" class="filter-btn" style="margin-left:8px;">Load Cell</button>
+                </div>
+            </section>
+
+            <div class="chart-row">
+                <section class="chart-section half-width">
+                    <h2 id="cellShapeTitle">Shape Components</h2>
+                    <div id="cellShapeChart" class="chart"></div>
+                </section>
+
+                <section class="chart-section half-width">
+                    <h2 id="cellRateTitle">Rate Components</h2>
+                    <div id="cellRateChart" class="chart"></div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Tab 5: Heatmap (Flexible) -->
+        <div id="heatmapTab" class="tab-content">
+            <section class="controls">
+                <div class="control-group">
+                    <label for="heatmapRegionSelect">Region:</label>
+                    <select id="heatmapRegionSelect">
+                        <option value="ca1">CA1</option>
+                        <option value="ca2">CA2</option>
+                        <option value="ca3">CA3</option>
+                        <option value="dg">Dentate Gyrus (DG)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="heatmapPredictedClassSelect">Predicted Class:</label>
+                    <select id="heatmapPredictedClassSelect" multiple size="6" style="width:250px;"></select>
+                </div>
+                <div class="control-group">
+                    <label for="heatmapDesiredClassSelect">Desired Class:</label>
+                    <select id="heatmapDesiredClassSelect"></select>
+                </div>
+                <div class="control-group">
+                    <label for="heatmapTopN">Show Top:</label>
+                    <select id="heatmapTopN">
+                        <option value="1">1 gene</option>
+                        <option value="3" selected>3 genes</option>
+                        <option value="5">5 genes</option>
+                        <option value="10">10 genes</option>
+                    </select>
+                </div>
+            </section>
+            <section class="chart-section full-width">
+                <h2 id="heatmapTitle">Gene Contribution Heatmap</h2>
+                <p id="heatmapSubtitle" class="chart-subtitle">For each cell, showing the gene with the highest contribution difference (predicted class − region family)</p>
+                <div id="dgca1Heatmap" class="chart"></div>
+            </section>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="loading hidden">
+            <div class="spinner"></div>
+            <p>Loading data...</p>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="error hidden">
+            <p>Failed to load data. Please ensure data files are generated.</p>
+        </div>
+    </div>
+
+    <!-- Main dashboard script -->
+    <script src="js/main.js"></script>
+</body>
+</html>
