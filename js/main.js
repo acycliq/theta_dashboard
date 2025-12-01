@@ -15,7 +15,11 @@ const state = {
     heatmapPredictedClasses: [],  // Array of selected predicted classes (multi-select)
     heatmapDesiredClass: null,    // Will be set when payload loads
     heatmapTopN: 3,
-    heatmapPayloadCache: {}  // Cache payloads by region: {ca1: {...}, ca2: {...}, ...}
+    heatmapPayloadCache: {},  // Cache payloads by region: {ca1: {...}, ca2: {...}, ...}
+    scaledExpData: null,      // Scaled expression data
+    scaledExpGroup: 'dg_in_ca1',  // Currently selected group
+    scaledExpCell: null,      // Currently selected cell index
+    showAllCells: true        // Toggle: show all cells vs single cell (default true)
 };
 
 // Region display names
@@ -189,6 +193,37 @@ function setupEventListeners() {
             renderDGCA1HeatmapFromPayload();
         });
     }
+
+    // Scaled expression controls
+    const scaledExpGroupSel = document.getElementById('scaledExpGroupSelect');
+    const scaledExpCellSel = document.getElementById('scaledExpCellSelect');
+    const showAllCellsCheckbox = document.getElementById('showAllCells');
+
+    if (scaledExpGroupSel) {
+        scaledExpGroupSel.addEventListener('change', (e) => {
+            state.scaledExpGroup = e.target.value;
+            state.scaledExpCell = null; // Reset cell selection
+            populateScaledExpCellDropdown();
+            renderScaledExpression();
+        });
+    }
+    if (scaledExpCellSel) {
+        scaledExpCellSel.addEventListener('change', (e) => {
+            state.scaledExpCell = parseInt(e.target.value);
+            renderScaledExpression();
+        });
+    }
+    if (showAllCellsCheckbox) {
+        showAllCellsCheckbox.addEventListener('change', (e) => {
+            state.showAllCells = e.target.checked;
+            // Hide/show cell dropdown
+            const cellSelectGroup = document.getElementById('scaledExpCellSelectGroup');
+            if (cellSelectGroup) {
+                cellSelectGroup.style.display = state.showAllCells ? 'none' : 'flex';
+            }
+            renderScaledExpression();
+        });
+    }
 }
 
 // Switch between tabs
@@ -242,6 +277,24 @@ function switchTab(tabName) {
             renderDGCA1HeatmapFromPayload();
         };
         if (window.requestAnimationFrame) requestAnimationFrame(run); else setTimeout(run, 0);
+    } else if (tabName === 'scaled-expression') {
+        document.getElementById('scaledExpressionTab').classList.add('active');
+
+        // Set initial visibility of cell dropdown based on showAllCells state
+        const cellSelectGroup = document.getElementById('scaledExpCellSelectGroup');
+        if (cellSelectGroup) {
+            cellSelectGroup.style.display = state.showAllCells ? 'none' : 'flex';
+        }
+
+        if (!state.scaledExpData) {
+            loadScaledExpressionData().then(() => {
+                populateScaledExpCellDropdown();
+                renderScaledExpression();
+            });
+        } else {
+            populateScaledExpCellDropdown();
+            renderScaledExpression();
+        }
     }
 }
 
@@ -1127,4 +1180,203 @@ async function renderDGCA1HeatmapFromData() {
         console.error('Failed to render heatmap from data payload:', e);
         return false;
     }
+}
+
+// Load scaled expression data
+async function loadScaledExpressionData() {
+    try {
+        const resp = await fetch('data/scaled_expressions.json', { cache: 'no-store' });
+        if (!resp.ok) {
+            console.error('Failed to load scaled expression data');
+            return;
+        }
+        state.scaledExpData = await resp.json();
+        console.log('Loaded scaled expression data:', state.scaledExpData);
+    } catch (e) {
+        console.error('Failed to load scaled expressions:', e);
+        state.scaledExpData = null;
+    }
+}
+
+// Populate cell dropdown for selected group
+function populateScaledExpCellDropdown() {
+    const cellSelect = document.getElementById('scaledExpCellSelect');
+    if (!cellSelect || !state.scaledExpData) return;
+
+    const group = state.scaledExpData.groups[state.scaledExpGroup];
+    if (!group || !group.cells || group.cells.length === 0) {
+        cellSelect.innerHTML = '<option value="">No cells available</option>';
+        state.scaledExpCell = null;
+        return;
+    }
+
+    // Build options
+    const options = group.cells.map((cell, idx) => {
+        const label = `Cell ${cell.cell_num} (${cell.primary_class})`;
+        return `<option value="${idx}">${label}</option>`;
+    });
+
+    cellSelect.innerHTML = options.join('');
+
+    // Select first cell by default
+    if (state.scaledExpCell === null || state.scaledExpCell >= group.cells.length) {
+        state.scaledExpCell = 0;
+    }
+    cellSelect.value = state.scaledExpCell;
+}
+
+// Render scaled expression scatter plot
+function renderScaledExpression() {
+    const el = document.getElementById('scaledExpChart');
+    if (!el) return;
+
+    if (!state.scaledExpData) {
+        el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:400px;color:#9ca3af">Loading...</div>';
+        return;
+    }
+
+    // Ensure state.scaledExpGroup matches the dropdown
+    const groupSelect = document.getElementById('scaledExpGroupSelect');
+    if (groupSelect && groupSelect.value !== state.scaledExpGroup) {
+        state.scaledExpGroup = groupSelect.value;
+    }
+
+    console.log('Rendering scaled expression for group:', state.scaledExpGroup);
+    console.log('Available groups:', Object.keys(state.scaledExpData.groups));
+
+    const group = state.scaledExpData.groups[state.scaledExpGroup];
+    if (!group || !group.cells || group.cells.length === 0) {
+        console.error('No group data found for:', state.scaledExpGroup);
+        el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:400px;color:#9ca3af">No cells in this group</div>';
+        return;
+    }
+
+    console.log(`Group ${state.scaledExpGroup} has ${group.cells.length} cells`);
+
+    const genes = state.scaledExpData.genes;
+    const traces = [];
+    let maxVal = 0;
+    let minVal = 0;  // Track minimum value
+    let titleText = '';
+
+    if (state.showAllCells) {
+        // Show all cells in group
+        const cellCount = group.cells.length;
+
+        // Define color palette for multiple cells
+        const colors = [
+            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+        ];
+
+        group.cells.forEach((cell, idx) => {
+            if (!cell.without_theta || !cell.with_theta || cell.without_theta.length !== genes.length) {
+                return; // Skip invalid cells
+            }
+
+            const x = cell.without_theta;
+            const y = cell.with_theta;
+
+            // Update maxVal and minVal
+            maxVal = Math.max(maxVal, Math.max(...x), Math.max(...y));
+            minVal = Math.min(minVal, Math.min(...x), Math.min(...y));
+
+            // Create scatter trace for this cell using WebGL for performance
+            const color = colors[idx % colors.length];
+            const scatterTrace = {
+                x,
+                y,
+                type: 'scattergl',  // WebGL for better performance
+                mode: 'markers',
+                marker: { size: 5, color, opacity: 0.5 },
+                customdata: genes.map(g => [g, cell.cell_num, cell.primary_class]),
+                hovertemplate: 'Cell: %{customdata[1]} (%{customdata[2]})<br>' +
+                               'Gene: %{customdata[0]}<br>' +
+                               'Without theta: %{x:.4f}<br>' +
+                               'With theta: %{y:.4f}<extra></extra>',
+                name: `Cell ${cell.cell_num}`,
+                showlegend: cellCount <= 10  // Only show legend if 10 or fewer cells
+            };
+
+            traces.push(scatterTrace);
+        });
+
+        titleText = `All Cells in Group (N=${cellCount} cells)`;
+    } else {
+        // Show single selected cell
+        if (state.scaledExpCell === null || state.scaledExpCell >= group.cells.length) {
+            el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:400px;color:#9ca3af">Please select a cell</div>';
+            return;
+        }
+
+        const cell = group.cells[state.scaledExpCell];
+
+        if (!cell.without_theta || !cell.with_theta || cell.without_theta.length !== genes.length) {
+            el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:400px;color:#9ca3af">Invalid cell data</div>';
+            return;
+        }
+
+        const x = cell.without_theta;
+        const y = cell.with_theta;
+
+        // Update maxVal and minVal
+        maxVal = Math.max(Math.max(...x), Math.max(...y));
+        minVal = Math.min(Math.min(...x), Math.min(...y));
+
+        // Create scatter trace
+        const scatterTrace = {
+            x,
+            y,
+            type: 'scatter',
+            mode: 'markers',
+            marker: { size: 4, color: '#4c51bf', opacity: 0.6 },
+            customdata: genes,
+            hovertemplate: 'Gene: %{customdata}<br>' +
+                           'Without theta: %{x:.4f}<br>' +
+                           'With theta: %{y:.4f}<extra></extra>',
+            name: 'Genes',
+            showlegend: false
+        };
+
+        traces.push(scatterTrace);
+        titleText = `Cell ${cell.cell_num}: ${cell.primary_class}`;
+    }
+
+    // Add diagonal line (y=x)
+    const pad = maxVal * 0.05;
+    const diagonalTrace = {
+        x: [0, maxVal + pad],
+        y: [0, maxVal + pad],
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: '#e74c3c', width: 2, dash: 'dash' },
+        name: 'y=x (no change)',
+        hoverinfo: 'skip',
+        showlegend: true
+    };
+
+    traces.push(diagonalTrace);
+
+    const layout = {
+        title: {
+            text: titleText,
+            font: { size: 14 }
+        },
+        xaxis: {
+            title: 'Scaled Expression WITHOUT theta',
+            range: [0, maxVal + pad],
+            autorange: false
+        },
+        yaxis: {
+            title: 'Scaled Expression WITH theta',
+            range: [0, maxVal + pad],
+            autorange: false
+        },
+        height: 600,
+        margin: { l: 80, r: 20, t: 80, b: 60 },
+        showlegend: state.showAllCells && group.cells.length <= 10, // Only show legend in all cells mode if manageable
+        legend: { x: 1.02, y: 1, xanchor: 'left' }
+    };
+
+    Plotly.newPlot('scaledExpChart', traces, layout, { responsive: true });
 }
