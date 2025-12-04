@@ -16,10 +16,9 @@ const state = {
     heatmapDesiredClass: null,    // Will be set when payload loads
     heatmapTopN: 3,
     heatmapPayloadCache: {},  // Cache payloads by region: {ca1: {...}, ca2: {...}, ...}
-    scaledExpData: null,      // Scaled expression data
-    scaledExpGroup: 'dg_in_ca1',  // Currently selected group
-    scaledExpCell: null,      // Currently selected cell index
-    showAllCells: true        // Toggle: show all cells vs single cell (default true)
+    geneScatterData: null,    // Gene scatter data (exp vs counts)
+    geneScatterGroup: 'dg_in_ca1',  // Currently selected group
+    geneScatterCell: null     // Currently selected cell index
 };
 
 // Region display names
@@ -194,34 +193,22 @@ function setupEventListeners() {
         });
     }
 
-    // Scaled expression controls
-    const scaledExpGroupSel = document.getElementById('scaledExpGroupSelect');
-    const scaledExpCellSel = document.getElementById('scaledExpCellSelect');
-    const showAllCellsCheckbox = document.getElementById('showAllCells');
+    // Gene scatter controls (Scaled Expression tab)
+    const geneScatterGroupSel = document.getElementById('geneScatterGroupSelect');
+    const geneScatterCellSel = document.getElementById('geneScatterCellSelect');
 
-    if (scaledExpGroupSel) {
-        scaledExpGroupSel.addEventListener('change', (e) => {
-            state.scaledExpGroup = e.target.value;
-            state.scaledExpCell = null; // Reset cell selection
-            populateScaledExpCellDropdown();
-            renderScaledExpression();
+    if (geneScatterGroupSel) {
+        geneScatterGroupSel.addEventListener('change', (e) => {
+            state.geneScatterGroup = e.target.value;
+            state.geneScatterCell = null; // Reset cell selection
+            populateGeneScatterCellDropdown();
+            renderGeneScatterPlot();
         });
     }
-    if (scaledExpCellSel) {
-        scaledExpCellSel.addEventListener('change', (e) => {
-            state.scaledExpCell = parseInt(e.target.value);
-            renderScaledExpression();
-        });
-    }
-    if (showAllCellsCheckbox) {
-        showAllCellsCheckbox.addEventListener('change', (e) => {
-            state.showAllCells = e.target.checked;
-            // Hide/show cell dropdown
-            const cellSelectGroup = document.getElementById('scaledExpCellSelectGroup');
-            if (cellSelectGroup) {
-                cellSelectGroup.style.display = state.showAllCells ? 'none' : 'flex';
-            }
-            renderScaledExpression();
+    if (geneScatterCellSel) {
+        geneScatterCellSel.addEventListener('change', (e) => {
+            state.geneScatterCell = parseInt(e.target.value);
+            renderGeneScatterPlot();
         });
     }
 }
@@ -277,23 +264,17 @@ function switchTab(tabName) {
             renderDGCA1HeatmapFromPayload();
         };
         if (window.requestAnimationFrame) requestAnimationFrame(run); else setTimeout(run, 0);
-    } else if (tabName === 'scaled-expression') {
-        document.getElementById('scaledExpressionTab').classList.add('active');
+    } else if (tabName === 'gene-scatter') {
+        document.getElementById('geneScatterTab').classList.add('active');
 
-        // Set initial visibility of cell dropdown based on showAllCells state
-        const cellSelectGroup = document.getElementById('scaledExpCellSelectGroup');
-        if (cellSelectGroup) {
-            cellSelectGroup.style.display = state.showAllCells ? 'none' : 'flex';
-        }
-
-        if (!state.scaledExpData) {
-            loadScaledExpressionData().then(() => {
-                populateScaledExpCellDropdown();
-                renderScaledExpression();
+        if (!state.geneScatterData) {
+            loadGeneScatterData().then(() => {
+                populateGeneScatterCellDropdown();
+                renderGeneScatterPlot();
             });
         } else {
-            populateScaledExpCellDropdown();
-            renderScaledExpression();
+            populateGeneScatterCellDropdown();
+            renderGeneScatterPlot();
         }
     }
 }
@@ -1182,31 +1163,31 @@ async function renderDGCA1HeatmapFromData() {
     }
 }
 
-// Load scaled expression data
-async function loadScaledExpressionData() {
+// Load gene scatter data
+async function loadGeneScatterData() {
     try {
-        const resp = await fetch('data/scaled_expressions.json', { cache: 'no-store' });
+        const resp = await fetch('data/gene_scatter_data.json', { cache: 'no-store' });
         if (!resp.ok) {
-            console.error('Failed to load scaled expression data');
+            console.error('Failed to load gene scatter data');
             return;
         }
-        state.scaledExpData = await resp.json();
-        console.log('Loaded scaled expression data:', state.scaledExpData);
+        state.geneScatterData = await resp.json();
+        console.log('Loaded gene scatter data:', state.geneScatterData);
     } catch (e) {
-        console.error('Failed to load scaled expressions:', e);
-        state.scaledExpData = null;
+        console.error('Failed to load gene scatter data:', e);
+        state.geneScatterData = null;
     }
 }
 
-// Populate cell dropdown for selected group
-function populateScaledExpCellDropdown() {
-    const cellSelect = document.getElementById('scaledExpCellSelect');
-    if (!cellSelect || !state.scaledExpData) return;
+// Populate cell dropdown for selected group (gene scatter)
+function populateGeneScatterCellDropdown() {
+    const cellSelect = document.getElementById('geneScatterCellSelect');
+    if (!cellSelect || !state.geneScatterData) return;
 
-    const group = state.scaledExpData.groups[state.scaledExpGroup];
+    const group = state.geneScatterData.groups[state.geneScatterGroup];
     if (!group || !group.cells || group.cells.length === 0) {
         cellSelect.innerHTML = '<option value="">No cells available</option>';
-        state.scaledExpCell = null;
+        state.geneScatterCell = null;
         return;
     }
 
@@ -1219,164 +1200,138 @@ function populateScaledExpCellDropdown() {
     cellSelect.innerHTML = options.join('');
 
     // Select first cell by default
-    if (state.scaledExpCell === null || state.scaledExpCell >= group.cells.length) {
-        state.scaledExpCell = 0;
+    if (state.geneScatterCell === null || state.geneScatterCell >= group.cells.length) {
+        state.geneScatterCell = 0;
     }
-    cellSelect.value = state.scaledExpCell;
+    cellSelect.value = state.geneScatterCell;
 }
 
-// Render scaled expression scatter plot
-function renderScaledExpression() {
-    const el = document.getElementById('scaledExpChart');
+// Render gene scatter plot (expression vs counts)
+function renderGeneScatterPlot() {
+    const el = document.getElementById('geneScatterChart');
     if (!el) return;
 
-    if (!state.scaledExpData) {
+    if (!state.geneScatterData) {
         el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:400px;color:#9ca3af">Loading...</div>';
         return;
     }
 
-    // Ensure state.scaledExpGroup matches the dropdown
-    const groupSelect = document.getElementById('scaledExpGroupSelect');
-    if (groupSelect && groupSelect.value !== state.scaledExpGroup) {
-        state.scaledExpGroup = groupSelect.value;
+    // Ensure state.geneScatterGroup matches the dropdown
+    const groupSelect = document.getElementById('geneScatterGroupSelect');
+    if (groupSelect && groupSelect.value !== state.geneScatterGroup) {
+        state.geneScatterGroup = groupSelect.value;
     }
 
-    console.log('Rendering scaled expression for group:', state.scaledExpGroup);
-    console.log('Available groups:', Object.keys(state.scaledExpData.groups));
+    console.log('Rendering gene scatter for group:', state.geneScatterGroup);
+    console.log('Available groups:', Object.keys(state.geneScatterData.groups));
 
-    const group = state.scaledExpData.groups[state.scaledExpGroup];
+    const group = state.geneScatterData.groups[state.geneScatterGroup];
     if (!group || !group.cells || group.cells.length === 0) {
-        console.error('No group data found for:', state.scaledExpGroup);
+        console.error('No group data found for:', state.geneScatterGroup);
         el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:400px;color:#9ca3af">No cells in this group</div>';
         return;
     }
 
-    console.log(`Group ${state.scaledExpGroup} has ${group.cells.length} cells`);
+    console.log(`Group ${state.geneScatterGroup} has ${group.cells.length} cells`);
 
-    const genes = state.scaledExpData.genes;
-    const traces = [];
-    let maxVal = 0;
-    let minVal = 0;  // Track minimum value
-    let titleText = '';
+    const genes = state.geneScatterData.genes;
 
-    if (state.showAllCells) {
-        // Show all cells in group
-        const cellCount = group.cells.length;
-
-        // Define color palette for multiple cells
-        const colors = [
-            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
-        ];
-
-        group.cells.forEach((cell, idx) => {
-            if (!cell.without_theta || !cell.with_theta || cell.without_theta.length !== genes.length) {
-                return; // Skip invalid cells
-            }
-
-            const x = cell.without_theta;
-            const y = cell.with_theta;
-
-            // Update maxVal and minVal
-            maxVal = Math.max(maxVal, Math.max(...x), Math.max(...y));
-            minVal = Math.min(minVal, Math.min(...x), Math.min(...y));
-
-            // Create scatter trace for this cell using WebGL for performance
-            const color = colors[idx % colors.length];
-            const scatterTrace = {
-                x,
-                y,
-                type: 'scattergl',  // WebGL for better performance
-                mode: 'markers',
-                marker: { size: 5, color, opacity: 0.5 },
-                customdata: genes.map(g => [g, cell.cell_num, cell.primary_class]),
-                hovertemplate: 'Cell: %{customdata[1]} (%{customdata[2]})<br>' +
-                               'Gene: %{customdata[0]}<br>' +
-                               'Without theta: %{x:.4f}<br>' +
-                               'With theta: %{y:.4f}<extra></extra>',
-                name: `Cell ${cell.cell_num}`,
-                showlegend: cellCount <= 10  // Only show legend if 10 or fewer cells
-            };
-
-            traces.push(scatterTrace);
-        });
-
-        titleText = `All Cells in Group (N=${cellCount} cells)`;
-    } else {
-        // Show single selected cell
-        if (state.scaledExpCell === null || state.scaledExpCell >= group.cells.length) {
-            el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:400px;color:#9ca3af">Please select a cell</div>';
-            return;
-        }
-
-        const cell = group.cells[state.scaledExpCell];
-
-        if (!cell.without_theta || !cell.with_theta || cell.without_theta.length !== genes.length) {
-            el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:400px;color:#9ca3af">Invalid cell data</div>';
-            return;
-        }
-
-        const x = cell.without_theta;
-        const y = cell.with_theta;
-
-        // Update maxVal and minVal
-        maxVal = Math.max(Math.max(...x), Math.max(...y));
-        minVal = Math.min(Math.min(...x), Math.min(...y));
-
-        // Create scatter trace
-        const scatterTrace = {
-            x,
-            y,
-            type: 'scatter',
-            mode: 'markers',
-            marker: { size: 4, color: '#4c51bf', opacity: 0.6 },
-            customdata: genes,
-            hovertemplate: 'Gene: %{customdata}<br>' +
-                           'Without theta: %{x:.4f}<br>' +
-                           'With theta: %{y:.4f}<extra></extra>',
-            name: 'Genes',
-            showlegend: false
-        };
-
-        traces.push(scatterTrace);
-        titleText = `Cell ${cell.cell_num}: ${cell.primary_class}`;
+    // Check if a cell is selected
+    if (state.geneScatterCell === null || state.geneScatterCell >= group.cells.length) {
+        el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:400px;color:#9ca3af">Please select a cell</div>';
+        return;
     }
 
+    const cell = group.cells[state.geneScatterCell];
+
+    if (!cell.exp_with_theta || !cell.exp_without_theta || !cell.counts ||
+        cell.exp_with_theta.length !== genes.length ||
+        cell.exp_without_theta.length !== genes.length ||
+        cell.counts.length !== genes.length) {
+        el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:400px;color:#9ca3af">Invalid cell data</div>';
+        return;
+    }
+
+    const traces = [];
+    let maxX = 0;
+    let maxY = 0;
+
+    // Blue trace: with theta (exp_with_theta vs counts)
+    const withThetaTrace = {
+        x: cell.exp_with_theta,
+        y: cell.counts,
+        type: 'scatter',
+        mode: 'markers',
+        marker: { size: 6, color: '#1f77b4', opacity: 0.6 },
+        customdata: genes,
+        hovertemplate: 'Gene: %{customdata}<br>' +
+                       'Scaled Exp (with theta): %{x:.4f}<br>' +
+                       'Counts: %{y}<extra></extra>',
+        name: 'With theta',
+        showlegend: true
+    };
+    traces.push(withThetaTrace);
+
+    // Orange trace: without theta (exp_without_theta vs counts)
+    const withoutThetaTrace = {
+        x: cell.exp_without_theta,
+        y: cell.counts,
+        type: 'scatter',
+        mode: 'markers',
+        marker: { size: 6, color: '#ff7f0e', opacity: 0.6 },
+        customdata: genes,
+        hovertemplate: 'Gene: %{customdata}<br>' +
+                       'Scaled Exp (without theta): %{x:.4f}<br>' +
+                       'Counts: %{y}<extra></extra>',
+        name: 'Without theta',
+        showlegend: true
+    };
+    traces.push(withoutThetaTrace);
+
+    // Calculate max values for axes
+    maxX = Math.max(
+        Math.max(...cell.exp_with_theta.filter(v => isFinite(v))),
+        Math.max(...cell.exp_without_theta.filter(v => isFinite(v)))
+    );
+    maxY = Math.max(...cell.counts.filter(v => isFinite(v)));
+
+    const padX = maxX * 0.05;
+    const padY = maxY * 0.05;
+
     // Add diagonal line (y=x)
-    const pad = maxVal * 0.05;
+    const maxVal = Math.max(maxX, maxY);
     const diagonalTrace = {
-        x: [0, maxVal + pad],
-        y: [0, maxVal + pad],
+        x: [0, maxVal + Math.max(padX, padY)],
+        y: [0, maxVal + Math.max(padX, padY)],
         type: 'scatter',
         mode: 'lines',
         line: { color: '#e74c3c', width: 2, dash: 'dash' },
-        name: 'y=x (no change)',
+        name: 'y=x',
         hoverinfo: 'skip',
         showlegend: true
     };
-
     traces.push(diagonalTrace);
 
     const layout = {
         title: {
-            text: titleText,
+            text: `Cell ${cell.cell_num}: ${cell.primary_class}`,
             font: { size: 14 }
         },
         xaxis: {
-            title: 'Scaled Expression WITHOUT theta',
-            range: [0, maxVal + pad],
+            title: 'Scaled Expression',
+            range: [0, maxVal + Math.max(padX, padY)],
             autorange: false
         },
         yaxis: {
-            title: 'Scaled Expression WITH theta',
-            range: [0, maxVal + pad],
+            title: 'Gene Counts',
+            range: [0, maxVal + Math.max(padX, padY)],
             autorange: false
         },
         height: 600,
         margin: { l: 80, r: 20, t: 80, b: 60 },
-        showlegend: state.showAllCells && group.cells.length <= 10, // Only show legend in all cells mode if manageable
+        showlegend: true,
         legend: { x: 1.02, y: 1, xanchor: 'left' }
     };
 
-    Plotly.newPlot('scaledExpChart', traces, layout, { responsive: true });
+    Plotly.newPlot('geneScatterChart', traces, layout, { responsive: true });
 }

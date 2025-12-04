@@ -26,7 +26,7 @@
             <button class="tab-btn" data-tab="components">Theta Components</button>
             <button class="tab-btn" data-tab="cell">Cell Components</button>
             <button class="tab-btn" data-tab="heatmap">Gene Contributions</button>
-            <button class="tab-btn" data-tab="scaled-expression">Scaled Expression</button>
+            <button class="tab-btn" data-tab="gene-scatter">Scaled Expression</button>
         </div>
 
         <!-- Tab 1: Classification Comparison -->
@@ -187,31 +187,26 @@
             </section>
         </div>
 
-        <!-- Tab 6: Scaled Expression -->
-        <div id="scaledExpressionTab" class="tab-content">
+        <!-- Tab 6: Gene Scatter (Scaled Expression) -->
+        <div id="geneScatterTab" class="tab-content">
             <!-- Controls -->
             <section class="controls">
                 <div class="control-group">
-                    <label for="scaledExpGroupSelect">Cell Type Group:</label>
-                    <select id="scaledExpGroupSelect">
-                        <option value="ca1_in_ca1">CA1 in CA1</option>
+                    <label for="geneScatterGroupSelect">Cell Type Group:</label>
+                    <select id="geneScatterGroupSelect">
+                        <option value="dg_in_ca1" selected>DG in CA1</option>
                         <option value="ca2_in_ca1">CA2 in CA1</option>
                         <option value="ca3_in_ca1">CA3 in CA1</option>
-                        <option value="dg_in_ca1" selected>DG in CA1</option>
                         <option value="l23_in_ca1">L2/3 in CA1</option>
+                        <option value="l45_in_ca1">L4/5 in CA1</option>
                         <option value="l5_in_ca1">L5 in CA1</option>
                         <option value="l6_in_ca1">L6 in CA1</option>
+                        <option value="ca1_in_ca1">CA1 in CA1</option>
                     </select>
                 </div>
                 <div class="control-group">
-                    <label>
-                        <input type="checkbox" id="showAllCells" checked>
-                        Show All Cells in Group
-                    </label>
-                </div>
-                <div class="control-group" id="scaledExpCellSelectGroup">
-                    <label for="scaledExpCellSelect">Cell:</label>
-                    <select id="scaledExpCellSelect">
+                    <label for="geneScatterCellSelect">Cell:</label>
+                    <select id="geneScatterCellSelect">
                         <option value="">Select a cell...</option>
                     </select>
                 </div>
@@ -219,9 +214,9 @@
 
             <!-- Scatter Plot -->
             <section class="chart-section full-width">
-                <h2 id="scaledExpTitle">Scaled Expression: With vs Without Theta</h2>
-                <p class="chart-subtitle">Each point represents one gene. Diagonal line (y=x) shows no change.</p>
-                <div id="scaledExpChart" class="chart"></div>
+                <h2 id="geneScatterTitle">Scaled Expression vs Gene Counts</h2>
+                <p class="chart-subtitle">Each point represents one gene. X-axis: scaled expression, Y-axis: gene counts. Blue: with theta, Orange: without theta.</p>
+                <div id="geneScatterChart" class="chart"></div>
             </section>
         </div>
 
